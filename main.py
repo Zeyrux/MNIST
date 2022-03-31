@@ -39,6 +39,7 @@ data_test_loader = torch.utils.data.DataLoader(
     shuffle=True
 )
 
+
 class Network(nn.Module):
     def __init__(self):
         super().__init__()
@@ -130,6 +131,6 @@ def test(epochs):
         print("Duration:", time.time() - start_time)
 
 
-train(10, max_lr=0.2, min_lr=0.005)
+train(5, max_lr=0.5, min_lr=0.01)
 print("\n\nTEST")
 test(2)

@@ -2,6 +2,8 @@ import time
 from collections import namedtuple, OrderedDict
 from itertools import product
 
+from lr_calculater import LRLinear
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -84,40 +86,33 @@ class RunBuilder:
 
 class RunManager:
     def __init__(self,
-                 max_lr,
-                 min_lr,
-                 epochs,
+                 run,
                  dataloader,
                  dataset,
-                 comment=None,
                  tensorboard=True):
-        self.max_lr = max_lr
-        self.min_lr = min_lr
         self.tensorboard = tensorboard
+        self.lr_calculater = run.lr_calculater(run.max_lr, run.min_lr,
+                                               len(dataloader), run.epochs)
 
         self.dataloader = dataloader
         self.dataset = dataset
 
-        if tensorboard:
-            if comment is not None:
-                self.tb = SummaryWriter(comment=comment)
-            else:
-                self.tb = SummaryWriter()
-
-        self.epochs = epochs
+        self.epochs = run.epochs
         self.epoch_cnt = 0
+
+        self.str = f"{str(self.lr_calculater)}, epochs={self.epochs}"
+        if tensorboard:
+            self.tb = SummaryWriter(comment=f"  {self.str}")
 
         self.start_time = None
 
         self.batch_cnt = 0
 
-        self.step_lr = (max_lr - min_lr) / (len(dataloader) * self.epochs)
-
         self.correct = 0
         self.total_loss = 0
 
     def _calculate_lr(self):
-        return self.max_lr - self.step_lr * self.batch_cnt
+        return self.lr_calculater.calculate_lr(self.batch_cnt)
 
     def get_learning_rate(self):
         lr = self._calculate_lr()
@@ -136,7 +131,6 @@ class RunManager:
         self.total_loss = 0
 
     def end_epoch(self):
-        print((self.correct / len(self.dataset)) * 100)
         if self.tensorboard:
             self.tb.add_scalar("duration",
                                time.time() - self.start_time,
@@ -168,6 +162,9 @@ class RunManager:
         if self.tensorboard:
             self.tb.close()
 
+    def __str__(self):
+        return self.str
+
 
 net = Network()
 optimizer = optim.SGD(net.parameters(), lr=0.03)
@@ -180,17 +177,13 @@ def get_num_correct(predicts: torch.Tensor, labels: torch.Tensor):
 def train(params, tensorboard=True):
     for run in RunBuilder.get_runs(params):
 
-        print(f"start run: {str(run)}")
-
         manager = RunManager(
-            run.max_lr,
-            run.min_lr,
-            run.epochs,
+            run,
             data_train_loader,
             data_train_set,
-            comment=str(run),
             tensorboard=tensorboard
         )
+        print(f"start run: {str(manager)}")
         manager.start_run(network=net)
 
         for _ in range(manager.epochs):
@@ -236,12 +229,12 @@ def test(epochs):
 
 
 params = OrderedDict(
-    epochs=[5],
-    max_lr=[0.1],
-    min_lr=[0.001]
+    epochs=[2],
+    max_lr=[0.1, 0.05],
+    min_lr=[0.001],
+    lr_calculater=[LRLinear]
 )
 
 # f(x)=0.51 (((0.5)/(0.51)))^(x)
+# f(x)=0.503 (((0.5)/(0.503)))^(x)
 train(params)
-# print("\n\nTEST")
-# test(2)

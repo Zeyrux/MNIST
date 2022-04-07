@@ -2,13 +2,13 @@ import time
 from collections import namedtuple, OrderedDict
 from itertools import product
 
-from lr_calculater import LRLinear
+from lr_calculater import LRLinear, LRExponential
+from run_manager import RunManager
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from torch.utils.tensorboard import SummaryWriter
 
 import torchvision
 import torchvision.transforms as transforms
@@ -84,98 +84,17 @@ class RunBuilder:
         return runs
 
 
-class RunManager:
-    def __init__(self,
-                 run,
-                 dataloader,
-                 dataset,
-                 tensorboard=True):
-        self.tensorboard = tensorboard
-        self.lr_calculater = run.lr_calculater(run.max_lr, run.min_lr,
-                                               len(dataloader), run.epochs)
-
-        self.dataloader = dataloader
-        self.dataset = dataset
-
-        self.epochs = run.epochs
-        self.epoch_cnt = 0
-
-        self.str = f"{str(self.lr_calculater)}, epochs={self.epochs}"
-        if tensorboard:
-            self.tb = SummaryWriter(comment=f"  {self.str}")
-
-        self.start_time = None
-
-        self.batch_cnt = 0
-
-        self.correct = 0
-        self.total_loss = 0
-
-    def _calculate_lr(self):
-        return self.lr_calculater.calculate_lr(self.batch_cnt)
-
-    def get_learning_rate(self):
-        lr = self._calculate_lr()
-        if self.tensorboard:
-            self.tb.add_scalar("lr per batch", lr, self.batch_cnt)
-        return lr
-
-    def end_batch(self, correct=0, loss=0):
-        self.correct += correct
-        self.total_loss += loss
-        self.batch_cnt += 1
-
-    def start_epoch(self):
-        self.epoch_cnt += 1
-        self.correct = 0
-        self.total_loss = 0
-
-    def end_epoch(self):
-        if self.tensorboard:
-            self.tb.add_scalar("duration",
-                               time.time() - self.start_time,
-                               self.epoch_cnt)
-            self.tb.add_scalar("lr per epoch",
-                               self._calculate_lr(),
-                               self.epoch_cnt)
-            self.tb.add_scalar("correct",
-                               self.correct,
-                               self.epoch_cnt)
-            self.tb.add_scalar("correct in percent",
-                               (self.correct / len(self.dataset)) * 100,
-                               self.epoch_cnt)
-            self.tb.add_scalar("total loss per epoch",
-                               self.total_loss,
-                               self.epoch_cnt)
-            self.tb.add_scalar("average loss",
-                               self.total_loss / (self.batch_cnt * len(
-                                   self.dataloader)),
-                               self.epoch_cnt)
-
-    def start_run(self, network=None):
-        self.start_time = time.time()
-        if network is not None and self.tensorboard:
-            imgs, _ = next(iter(self.dataloader))
-            self.tb.add_graph(network, imgs)
-
-    def end_run(self):
-        if self.tensorboard:
-            self.tb.close()
-
-    def __str__(self):
-        return self.str
-
-
-net = Network()
-optimizer = optim.SGD(net.parameters(), lr=0.03)
-
-
 def get_num_correct(predicts: torch.Tensor, labels: torch.Tensor):
     return predicts.argmax(dim=1).eq(labels).sum().item()
 
 
 def train(params, tensorboard=True):
+    net = None
+
     for run in RunBuilder.get_runs(params):
+
+        net = Network()
+        optimizer = optim.SGD(net.parameters(), lr=0.03)
 
         manager = RunManager(
             run,
@@ -204,11 +123,11 @@ def train(params, tensorboard=True):
                                   loss=loss.item())
 
             manager.end_epoch()
-
         manager.end_run()
+    return net
 
 
-def test(epochs):
+def test(epochs, net):
     for epoch in range(epochs):
 
         start_time = time.time()
@@ -228,13 +147,12 @@ def test(epochs):
         print("Duration:", time.time() - start_time)
 
 
-params = OrderedDict(
-    epochs=[2],
-    max_lr=[0.1, 0.05],
-    min_lr=[0.001],
-    lr_calculater=[LRLinear]
-)
+if __name__ == "__main__":
+    params = OrderedDict(
+        epochs=[3],
+        max_lr=[0.05],
+        min_lr=[0.01, 0.005, 0.001],
+        lr_calculater=[LRExponential, LRLinear]
+    )
 
-# f(x)=0.51 (((0.5)/(0.51)))^(x)
-# f(x)=0.503 (((0.5)/(0.503)))^(x)
-train(params)
+    net = train(params)

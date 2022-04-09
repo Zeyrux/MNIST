@@ -150,7 +150,7 @@ def test(epochs, net):
 if __name__ == "__main__":
     params = OrderedDict(
         epochs=[3],
-        max_lr=[0.05],
+        max_lr=[0.1, 0.05, 0.01],
         min_lr=[0.01, 0.005, 0.001],
         lr_calculater=[LRExponential, LRLinear]
     )

@@ -3,6 +3,21 @@ from math import pow
 from numpy import log
 
 
+class LRPoint:
+    def __init__(self,
+                 max_lr: float,
+                 min_lr: float,
+                 cnt_batches: int,
+                 epochs: int):
+        self.lr = (max_lr + min_lr) / 2
+
+    def calculate_lr(self, batch_cnt: int) -> float:
+        return self.lr
+
+    def __str__(self):
+        return f"LRPoint(lr={self.lr})"
+
+
 class LRLinear:
     def __init__(self,
                  max_lr: float,
